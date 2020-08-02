@@ -1,0 +1,25 @@
+version: 2.1
+
+orbs:
+  python: circleci/python@0.2.1
+  flake8: arrai/flake8@6.0.0
+
+jobs:
+  build-and-test:
+    executor: python/default
+    steps:
+      - checkout
+      - python/load-cache
+      - python/install-deps
+      - python/save-cache
+      - run:
+          command: python setup.py test
+          name: Test
+
+workflows:
+  main:
+    jobs:
+      - build-and-test
+      - flake8/flake8:
+          executor: flake8/python38
+          wd: .

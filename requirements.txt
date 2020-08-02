@@ -1,0 +1,10 @@
+click
+flask
+flake8
+lxml
+pytest
+python-tcxparser
+pyyaml
+requests
+stravalib
+yapf

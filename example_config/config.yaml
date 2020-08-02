@@ -1,0 +1,10 @@
+strava:
+  auth_port: 1234
+  client_id: 12345
+  client_secret: xxxxxx
+  gear_id: 1234567
+  redirect_uri: 'http://mydomain/authorised'
+skip:
+  - 5e7c6e887f7c86027f000000
+  - 5e7c6e887f7c86027f000001
+  - 5e7c6e887f7c86027f000002
