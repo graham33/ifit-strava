@@ -94,7 +94,7 @@ you back on the URL provided with a (short-lived) access token, an expiry time
 and a refresh token that can be used to get a new access token. ifit-strava
 saves these tokens in `config/token.yaml` and will automatically refresh your
 access token when next invoked if it has expired. You should keep these tokens
-safe (as you should your client credentials) so **be careful checkng these into
+safe (as you should your client credentials) so **be careful checking these into
 git**. I use [git-crypt] to make this easy.
 
 ## Issues/TODO
