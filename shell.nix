@@ -1,6 +1,5 @@
 with import <nixpkgs> {};
-# TODO: python38
-with python37Packages;
+with python38Packages;
 
 let
   stravalib_patched = stravalib.overrideAttrs(o: {
