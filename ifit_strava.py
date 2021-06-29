@@ -9,6 +9,7 @@ import glob
 import http.cookiejar
 import logging
 import os
+import pickle
 import re
 import requests
 import stravalib
@@ -19,6 +20,7 @@ import time
 import yaml
 
 _AUTH_TIMEOUT = 60
+_IFIT_AUTH_URL = 'https://www.ifit.com/web-api/login'
 _MAX_PAGES = 10
 _MIN_WORKOUT_SIZE = 1024
 _SCOPE = ['activity:read', 'activity:write']
@@ -277,10 +279,11 @@ def _should_skip(workout, skip):
 @click.group(chain=True)
 @click.option('-c', '--config-file', default='config/config.yaml', help='Config file')
 @click.option('-t', '--token-file', default='config/token.yaml', help='Token file path (generated file)')
+@click.option('-C', '--cookies-file', default='config/cookies.txt', help='Cached cookies file')
 @click.option('-v', '--verbose/--no-verbose', default=False, help='Enable verbose logging')
 @click.option('-w', '--workout-dir', default='workouts', help='Directory to save cached iFit workouts in')
 @click.pass_context
-def ifit_strava(ctx, config_file, token_file, verbose, workout_dir):
+def ifit_strava(ctx, config_file, token_file, cookies_file, verbose, workout_dir):
     ctx.ensure_object(dict)
 
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
@@ -289,19 +292,18 @@ def ifit_strava(ctx, config_file, token_file, verbose, workout_dir):
 
     ctx.obj['config_file'] = config_file
     ctx.obj['token_file'] = token_file
+    ctx.obj['cookies_file'] = cookies_file
     ctx.obj['workout_dir'] = workout_dir
 
 
 @ifit_strava.command(help='Download workouts from ifit.com')
-@click.option('--cookies-file',
-              default='config/cookies.txt',
-              help='Mozilla format cookies.txt file containing ifit.com session cookies')
 @click.pass_context
-def download(ctx, cookies_file):
+def download(ctx):
     workout_dir = ctx.obj['workout_dir']
+    cookies_file = ctx.obj['cookies_file']
 
-    cj = http.cookiejar.MozillaCookieJar()
-    cj.load(cookies_file)
+    cj = http.cookiejar.MozillaCookieJar(cookies_file)
+    cj.load()
 
     workouts = list()
     for i in range(1, _MAX_PAGES):
@@ -318,12 +320,33 @@ def download(ctx, cookies_file):
     for workout_id in workouts:
         _download_workout(workout_id, workout_dir, cj)
 
+def _auth_ifit(config, cookies_file):
+    file_cookie_jar = http.cookiejar.MozillaCookieJar(cookies_file)
+    if os.path.exists(cookies_file):
+        logging.debug(f"Loading iFit cookies from {cookies_file}")
+        file_cookie_jar.load()
+        logging.debug(f"Obtained cookies: {file_cookie_jar}")
+        for c in file_cookie_jar:
+            if c.name == "ifit.sid":
+                # TODO: check expiry
+                logging.debug(f"XXX {c}")
+    else:
+        logging.debug("Authenticating with iFit")
+        username = config['ifit']['username']
+        password = config['ifit']['password']
+        response = requests.post(_IFIT_AUTH_URL, json={'email': username, 'password': password})
+        response.raise_for_status()
+        logging.debug(f"Obtained cookies: {file_cookie_jar}")
+        for c in response.cookies:
+            if c.expires is None:
+                c.expires = time.time() + 5 * 24 * 60 * 60
+            logging.debug(f"XXXX {c.name} {c.expires} {c.is_expired()} {c.discard}")
+            file_cookie_jar.set_cookie(c)
+        logging.debug(f"Writing iFit cookies to {cookies_file}")
+        file_cookie_jar.save(ignore_discard=True)
 
-@ifit_strava.command(help='Authenticate with strava')
-@click.pass_context
-def auth(ctx):
-    config = _load_config(ctx.obj['config_file'])
 
+def _auth_strava(config):
     client_id = config['strava']['client_id']
     client_secret = config['strava']['client_secret']
 
@@ -362,6 +385,16 @@ def auth(ctx):
 
     logging.debug(f"Saving token config to {ctx.obj['token_file']}")
     _write_config(ctx.obj['token_file'], token_config)
+
+@ifit_strava.command(help='Authenticate with iFit and Strava')
+@click.pass_context
+def auth(ctx):
+    config = _load_config(ctx.obj['config_file'])
+    cookies_file = ctx.obj['cookies_file']
+    _auth_ifit(config, cookies_file)
+    # TODO
+    sys.exit(1)
+    _auth_strava(config)
 
 
 @ifit_strava.command(help='Idempotently upload workouts to Strava')
